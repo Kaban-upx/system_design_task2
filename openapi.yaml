@@ -1,0 +1,589 @@
+openapi: 3.0.3
+info:
+  title: Delivery Service API
+  description: |
+    REST API сервис для управления доставкой посылок между пользователями.
+    
+    **Вариант 6: Сервис доставки (аналог CDEK)**
+    
+    ### Основные возможности:
+    - Регистрация и аутентификация пользователей
+    - Создание и управление посылками
+    - Оформление доставок между пользователями
+    - Поиск пользователей по логину, имени и фамилии
+    
+    ### Аутентификация
+    Для защищённых endpoints используйте JWT Bearer токен:
+    1. Получите токен через `POST /api/users/login`
+    2. Добавьте заголовок `Authorization: Bearer <token>` к запросам
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+  - url: https://api.delivery-service.example.com
+    description: Production server
+
+tags:
+  - name: Auth
+    description: Операции аутентификации и регистрации
+  - name: Users
+    description: Поиск и управление пользователями
+  - name: Parcels
+    description: Управление посылками
+  - name: Deliveries
+    description: Управление доставками
+
+paths:
+  # ==================== AUTH ENDPOINTS ====================
+  /api/users/register:
+    post:
+      tags:
+        - Auth
+      summary: Регистрация нового пользователя
+      description: Создаёт нового пользователя в системе
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+            examples:
+              example1:
+                summary: Пример регистрации
+                value:
+                  login: "ivan_ivanov"
+                  password: "secure_password_123"
+                  first_name: "Ivan"
+                  last_name: "Ivanov"
+      responses:
+        '201':
+          description: Пользователь успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              examples:
+                example1:
+                  value:
+                    id: 1
+                    login: "ivan_ivanov"
+                    first_name: "Ivan"
+                    last_name: "Ivanov"
+        '400':
+          description: Логин уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Login already registered"
+        '422':
+          description: Ошибка валидации данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+
+  /api/users/login:
+    post:
+      tags:
+        - Auth
+      summary: Аутентификация пользователя
+      description: Возвращает JWT токен для авторизованных запросов
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  description: Логин пользователя
+                password:
+                  type: string
+                  format: password
+                  description: Пароль пользователя
+            examples:
+              example1:
+                summary: Пример входа
+                value:
+                  username: "ivan_ivanov"
+                  password: "secure_password_123"
+      responses:
+        '200':
+          description: Успешная аутентификация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                token_type: "bearer"
+        '401':
+          description: Неверный логин или пароль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Incorrect login or password"
+
+  # ==================== USER SEARCH ENDPOINTS ====================
+  /api/users/search/login:
+    get:
+      tags:
+        - Users
+      summary: Поиск пользователя по логину
+      description: Возвращает список пользователей, логин которых содержит указанную подстроку
+      operationId: searchUserByLogin
+      parameters:
+        - name: login
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Подстрока для поиска по логину
+          example: "ivan"
+      responses:
+        '200':
+          description: Список найденных пользователей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+              example:
+                - id: 1
+                  login: "ivan_ivanov"
+                  first_name: "Ivan"
+                  last_name: "Ivanov"
+
+  /api/users/search/name:
+    get:
+      tags:
+        - Users
+      summary: Поиск пользователя по имени и/или фамилии
+      description: Возвращает список пользователей, соответствующих маске имени и/или фамилии
+      operationId: searchUserByName
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Подстрока для поиска по имени
+          example: "Ivan"
+        - name: surname
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+          description: Подстрока для поиска по фамилии
+          example: "Ivanov"
+      responses:
+        '200':
+          description: Список найденных пользователей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+
+  # ==================== PARCELS ENDPOINTS ====================
+  /api/parcels:
+    post:
+      tags:
+        - Parcels
+      summary: Создание новой посылки
+      description: Создаёт посылку, принадлежащую авторизованному пользователю
+      operationId: createParcel
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcelCreate'
+            examples:
+              example1:
+                summary: Пример создания посылки
+                value:
+                  description: "Коробка с книгами"
+                  weight: 2.5
+      responses:
+        '201':
+          description: Посылка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+              example:
+                id: 1
+                owner_id: 1
+                description: "Коробка с книгами"
+                weight: 2.5
+                status: "created"
+        '401':
+          description: Неавторизованный запрос
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Ошибка валидации данных
+          $ref: '#/components/responses/ValidationError'
+
+  /api/parcels/me:
+    get:
+      tags:
+        - Parcels
+      summary: Получение списка посылок текущего пользователя
+      description: Возвращает все посылки, принадлежащие авторизованному пользователю
+      operationId: getMyParcels
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Список посылок пользователя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ParcelResponse'
+              example:
+                - id: 1
+                  owner_id: 1
+                  description: "Коробка с книгами"
+                  weight: 2.5
+                  status: "created"
+        '401':
+          description: Неавторизованный запрос
+          $ref: '#/components/responses/Unauthorized'
+
+  # ==================== DELIVERIES ENDPOINTS ====================
+  /api/deliveries:
+    post:
+      tags:
+        - Deliveries
+      summary: Создание доставки от пользователя к пользователю
+      description: Оформляет доставку посылки от авторизованного пользователя к получателю
+      operationId: createDelivery
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryCreate'
+            examples:
+              example1:
+                summary: Пример создания доставки
+                value:
+                  parcel_id: 1
+                  recipient_id: 2
+      responses:
+        '201':
+          description: Доставка успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryResponse'
+              example:
+                id: 1
+                parcel_id: 1
+                sender_id: 1
+                recipient_id: 2
+                status: "pending"
+        '401':
+          description: Неавторизованный запрос
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Пользователь не владеет указанной посылкой
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "You don't own this parcel"
+        '404':
+          description: Посылка или получатель не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: "Parcel not found"
+        '422':
+          description: Ошибка валидации данных
+          $ref: '#/components/responses/ValidationError'
+
+  /api/deliveries/recipient/{recipient_id}:
+    get:
+      tags:
+        - Deliveries
+      summary: Получение информации о доставке по получателю
+      description: Возвращает все доставки, где указанный пользователь является получателем
+      operationId: getDeliveriesByRecipient
+      parameters:
+        - name: recipient_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: ID пользователя-получателя
+          example: 2
+      responses:
+        '200':
+          description: Список доставок получателю
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryResponse'
+              example:
+                - id: 1
+                  parcel_id: 1
+                  sender_id: 1
+                  recipient_id: 2
+                  status: "pending"
+        '404':
+          description: Доставки не найдены
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+              example: []
+
+  /api/deliveries/sender/{sender_id}:
+    get:
+      tags:
+        - Deliveries
+      summary: Получение информации о доставке по отправителю
+      description: Возвращает все доставки, где указанный пользователь является отправителем
+      operationId: getDeliveriesBySender
+      parameters:
+        - name: sender_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: ID пользователя-отправителя
+          example: 1
+      responses:
+        '200':
+          description: Список доставок отправителя
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryResponse'
+
+# ==================== COMPONENTS ====================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен, полученный через `/api/users/login`
+
+  schemas:
+    # --- User Schemas ---
+    UserCreate:
+      type: object
+      required:
+        - login
+        - password
+        - first_name
+        - last_name
+      properties:
+        login:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "ivan_ivanov"
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 72
+          example: "secure_password_123"
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Ivan"
+        last_name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Ivanov"
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        login:
+          type: string
+          example: "ivan_ivanov"
+        first_name:
+          type: string
+          example: "Ivan"
+        last_name:
+          type: string
+          example: "Ivanov"
+
+    # --- Parcel Schemas ---
+    ParcelCreate:
+      type: object
+      required:
+        - description
+        - weight
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "Коробка с книгами"
+        weight:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 2.5
+
+    ParcelResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        owner_id:
+          type: integer
+          example: 1
+        description:
+          type: string
+          example: "Коробка с книгами"
+        weight:
+          type: number
+          format: float
+          example: 2.5
+        status:
+          type: string
+          enum: [created, in_transit, delivered, cancelled]
+          example: "created"
+
+    # --- Delivery Schemas ---
+    DeliveryCreate:
+      type: object
+      required:
+        - parcel_id
+        - recipient_id
+      properties:
+        parcel_id:
+          type: integer
+          minimum: 1
+          example: 1
+        recipient_id:
+          type: integer
+          minimum: 1
+          example: 2
+
+    DeliveryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        parcel_id:
+          type: integer
+          example: 1
+        sender_id:
+          type: integer
+          example: 1
+        recipient_id:
+          type: integer
+          example: 2
+        status:
+          type: string
+          enum: [pending, in_transit, delivered, cancelled]
+          example: "pending"
+
+    # --- Auth Schemas ---
+    Token:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT токен доступа
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          enum: [bearer]
+          example: "bearer"
+
+    # --- Error Schemas ---
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Описание ошибки
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+  responses:
+    Unauthorized:
+      description: Неавторизованный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            detail: "Could not validate credentials"
+
+    ValidationError:
+      description: Ошибка валидации данных
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'

@@ -1,0 +1,27 @@
+[project]
+name = "system-design-2-0"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "uvicorn (==0.23.0)",
+    "pydantic (==1.10.12)",
+    "pytest (==7.4.0)",
+    "httpx (==0.24.0)",
+    "pyyaml (==6.0.1)",
+    "fastapi (==0.100.0)",
+    "python-jose[cryptography] (==3.3.0)",
+    "passlib[bcrypt] (==1.7.4)",
+    "python-multipart (==0.0.10)"
+]
+
+[tool.poetry]
+packages = [{include = "system_design_2"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
